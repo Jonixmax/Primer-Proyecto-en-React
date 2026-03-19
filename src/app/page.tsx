@@ -1,65 +1,91 @@
-import Image from "next/image";
+"use client";
+import { useState } from "react";
+import axios from "axios";
+import { useAuth } from "./context/AuthContext"; 
 
-export default function Home() {
+export default function LoginPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const { login, user } = useAuth();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    try {
+      // 1. Llamamos a nuestra base de datos simulada
+      const respuesta = await axios.get("http://localhost:3001/users");
+      const usuarios = respuesta.data;
+
+      // 2. Buscamos si existe un usuario con esas credenciales
+      const usuarioEncontrado = usuarios.find(
+        (u: any) => u.username === username && u.password === password
+      );
+
+      if (usuarioEncontrado) {
+        // 3. Si existe, le decimos al guardia que lo deje pasar
+        login(usuarioEncontrado);
+        alert(`¡Bienvenido ${usuarioEncontrado.role}!`);
+        // Más adelante aquí lo enviaremos al Dashboard
+      } else {
+        setError("Usuario o contraseña incorrectos");
+      }
+    } catch (error) {
+      setError("Error al conectar con la base de datos. ¿Encendiste el JSON Server?");
+    }
+  };
+
+  // Si el usuario ya inició sesión, le mostramos un mensaje de bienvenida temporal
+  if (user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
+        <h1 className="text-3xl font-bold mb-4 text-black">¡Hola, {user.username}!</h1>
+        <p className="text-lg mb-4 text-black">Tu rol es: <span className="font-bold text-blue-600">{user.role}</span></p>
+        <p className="text-gray-600">Pronto crearemos el Dashboard aquí.</p>
+      </div>
+    );
+  }
+
+  // Si no ha iniciado sesión, mostramos el formulario
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-96">
+        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Iniciar Sesión</h2>
+        
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+
+        <form onSubmit={handleLogin}>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2">Usuario</label>
+            <input 
+              type="text" 
+              className="w-full px-3 py-2 border rounded-lg text-gray-700 focus:outline-none focus:border-blue-500"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2">Contraseña</label>
+            <input 
+              type="password" 
+              className="w-full px-3 py-2 border rounded-lg text-gray-700 focus:outline-none focus:border-blue-500"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            className="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200"
           >
-            Documentation
-          </a>
-        </div>
-      </main>
+            Entrar
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
