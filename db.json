@@ -1,0 +1,12 @@
+{
+  "users": [
+    { "id": "1", "username": "gerente1", "password": "123", "role": "gerente" },
+    { "id": "2", "username": "usuario1", "password": "123", "role": "usuario" }
+  ],
+  "projects": [
+    { "id": "1", "name": "Sitio Web", "description": "Crear landing page", "progress": 50 }
+  ],
+  "tasks": [
+    { "id": "1", "projectId": "1", "title": "Diseñar logo", "status": "pendiente", "assignedTo": "2" }
+  ]
+}
