@@ -1,12 +1,40 @@
 {
   "users": [
-    { "id": "1", "username": "gerente1", "password": "123", "role": "gerente" },
-    { "id": "2", "username": "usuario1", "password": "123", "role": "usuario" }
+    {
+      "id": "1",
+      "username": "gerente1",
+      "password": "123",
+      "role": "gerente"
+    },
+    {
+      "id": "2",
+      "username": "usuario1",
+      "password": "123",
+      "role": "usuario"
+    }
   ],
   "projects": [
-    { "id": "1", "name": "Sitio Web", "description": "Crear landing page", "progress": 50 }
+    {
+      "id": "1",
+      "name": "Sitio Web",
+      "description": "Crear landing page",
+      "progress": 50
+    },
+    {
+      "id": "c6c8",
+      "name": "Rediseño de la App",
+      "description": "Rediseñar la App creada para darle un mejor estilo al cliente ",
+      "progress": 0
+    }
   ],
   "tasks": [
-    { "id": "1", "projectId": "1", "title": "Diseñar logo", "status": "pendiente", "assignedTo": "2" }
-  ]
+    {
+      "id": "1",
+      "projectId": "1",
+      "title": "Diseñar logo",
+      "status": "pendiente",
+      "assignedTo": "2"
+    }
+  ],
+  "$schema": "./node_modules/json-server/schema.json"
 }
