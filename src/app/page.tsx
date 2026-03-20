@@ -1,9 +1,8 @@
 "use client";
-import { useState, useEffect } from "react"; // <-- Agregamos useEffect
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "./context/AuthContext"; 
 
-// Definimos la estructura del proyecto para que TypeScript no se queje
 interface Proyecto {
   id: string | number;
   name: string;
@@ -15,13 +14,14 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  
-  // Nuevo estado para guardar los proyectos de la API
   const [proyectos, setProyectos] = useState<Proyecto[]>([]); 
   
-  const { login, user } = useAuth();
+  // --- NUEVOS ESTADOS PARA CREAR PROYECTO ---
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [nuevoProyecto, setNuevoProyecto] = useState({ name: "", description: "" });
 
-  // useEffect para cargar los datos de la API apenas entramos al Dashboard
+  const { login, logout, user } = useAuth();
+
   useEffect(() => {
     if (user) {
       const cargarProyectos = async () => {
@@ -34,7 +34,7 @@ export default function LoginPage() {
       };
       cargarProyectos();
     }
-  }, [user]); // Esto se ejecuta cada vez que el estado del 'user' cambia
+  }, [user]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +50,6 @@ export default function LoginPage() {
 
       if (usuarioEncontrado) {
         login(usuarioEncontrado);
-        // Quitamos el alert para que la transición sea más limpia
       } else {
         setError("Usuario o contraseña incorrectos");
       }
@@ -59,11 +58,40 @@ export default function LoginPage() {
     }
   };
 
+  // --- FUNCIÓN PARA GUARDAR EL NUEVO PROYECTO ---
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      // Preparamos los datos (JSON Server le pondrá el ID automáticamente)
+      // Iniciamos el progreso en 0% por defecto
+      const datosProyecto = {
+        name: nuevoProyecto.name,
+        description: nuevoProyecto.description,
+        progress: 0
+      };
+
+      // Hacemos el POST a la base de datos simulada
+      const respuesta = await axios.post("http://localhost:3001/projects", datosProyecto);
+
+      // Agregamos el nuevo proyecto a la lista que ya vemos en pantalla (sin recargar la página)
+      setProyectos([...proyectos, respuesta.data]);
+
+      // Cerramos el modal y limpiamos el formulario
+      setIsModalOpen(false);
+      setNuevoProyecto({ name: "", description: "" });
+      
+    } catch (error) {
+      console.error("Error al crear proyecto", error);
+      alert("Hubo un problema al crear el proyecto.");
+    }
+  };
+
+
   // --- VISTA PROTEGIDA: DASHBOARD ---
   if (user) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        {/* Cabecera del Dashboard */}
+      <div className="min-h-screen bg-gray-50 p-8 relative">
         <div className="max-w-6xl mx-auto flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-800">Panel de Control</h1>
@@ -72,15 +100,26 @@ export default function LoginPage() {
             </p>
           </div>
           
-          {/* Aquí aplicamos la regla de ROLES: Solo el gerente ve este botón */}
-          {user.role === "gerente" && (
-            <button className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-200">
-              + Crear Nuevo Proyecto
+          <div className="flex gap-4 items-center">
+            {/* Botón modificado para que abra el Modal */}
+            {user.role === "gerente" && (
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-200"
+              >
+                + Crear Nuevo Proyecto
+              </button>
+            )}
+            
+            <button 
+              onClick={() => logout()} 
+              className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-200"
+            >
+              Cerrar Sesión
             </button>
-          )}
+          </div>
         </div>
 
-        {/* Cuadrícula de Proyectos (Responsive) */}
         <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {proyectos.length > 0 ? (
             proyectos.map((proyecto) => (
@@ -88,7 +127,6 @@ export default function LoginPage() {
                 <h3 className="text-xl font-bold text-gray-800 mb-2">{proyecto.name}</h3>
                 <p className="text-gray-600 mb-4">{proyecto.description}</p>
                 
-                {/* Barra de Progreso Visual */}
                 <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
                   <div 
                     className="bg-blue-600 h-2.5 rounded-full" 
@@ -97,7 +135,6 @@ export default function LoginPage() {
                 </div>
                 <p className="text-right text-sm text-gray-500 font-bold">{proyecto.progress}% completado</p>
                 
-                {/* Opciones de edición para gerentes */}
                 {user.role === "gerente" && (
                   <div className="mt-4 flex gap-2">
                     <button className="text-sm text-blue-500 hover:text-blue-700 font-semibold">Editar</button>
@@ -107,9 +144,60 @@ export default function LoginPage() {
               </div>
             ))
           ) : (
-            <p className="text-gray-500">Cargando proyectos o no hay proyectos disponibles...</p>
+            <p className="text-gray-500">No hay proyectos disponibles. ¡Crea uno nuevo!</p>
           )}
         </div>
+
+        {/* --- MODAL PARA CREAR PROYECTO --- */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">Crear Nuevo Proyecto</h2>
+              
+              <form onSubmit={handleCreateProject}>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2">Nombre del Proyecto</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-3 py-2 border rounded-lg text-gray-700 focus:outline-none focus:border-green-500"
+                    value={nuevoProyecto.name}
+                    onChange={(e) => setNuevoProyecto({ ...nuevoProyecto, name: e.target.value })}
+                    required
+                    placeholder="Ej. Rediseño de la App"
+                  />
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-gray-700 text-sm font-bold mb-2">Descripción</label>
+                  <textarea 
+                    className="w-full px-3 py-2 border rounded-lg text-gray-700 focus:outline-none focus:border-green-500"
+                    value={nuevoProyecto.description}
+                    onChange={(e) => setNuevoProyecto({ ...nuevoProyecto, description: e.target.value })}
+                    required
+                    rows={3}
+                    placeholder="Describe los objetivos del proyecto..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsModalOpen(false)}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -117,11 +205,10 @@ export default function LoginPage() {
   // --- VISTA PÚBLICA: FORMULARIO DE LOGIN ---
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      {/* ... (El formulario de login se mantiene exactamente igual que antes) ... */}
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
         <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Iniciar Sesión</h2>
-        
         {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
-
         <form onSubmit={handleLogin}>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2">Usuario</label>
@@ -133,7 +220,6 @@ export default function LoginPage() {
               required
             />
           </div>
-
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2">Contraseña</label>
             <input 
@@ -144,7 +230,6 @@ export default function LoginPage() {
               required
             />
           </div>
-
           <button 
             type="submit" 
             className="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200"
