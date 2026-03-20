@@ -1,33 +1,56 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react"; // <-- Agregamos useEffect
 import axios from "axios";
 import { useAuth } from "./context/AuthContext"; 
+
+// Definimos la estructura del proyecto para que TypeScript no se queje
+interface Proyecto {
+  id: string | number;
+  name: string;
+  description: string;
+  progress: number;
+}
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  
+  // Nuevo estado para guardar los proyectos de la API
+  const [proyectos, setProyectos] = useState<Proyecto[]>([]); 
+  
   const { login, user } = useAuth();
+
+  // useEffect para cargar los datos de la API apenas entramos al Dashboard
+  useEffect(() => {
+    if (user) {
+      const cargarProyectos = async () => {
+        try {
+          const respuesta = await axios.get("http://localhost:3001/projects");
+          setProyectos(respuesta.data);
+        } catch (error) {
+          console.error("Error al cargar los proyectos", error);
+        }
+      };
+      cargarProyectos();
+    }
+  }, [user]); // Esto se ejecuta cada vez que el estado del 'user' cambia
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
     try {
-      // 1. Llamamos a nuestra base de datos simulada
       const respuesta = await axios.get("http://localhost:3001/users");
       const usuarios = respuesta.data;
 
-      // 2. Buscamos si existe un usuario con esas credenciales
       const usuarioEncontrado = usuarios.find(
         (u: any) => u.username === username && u.password === password
       );
 
       if (usuarioEncontrado) {
-        // 3. Si existe, le decimos al guardia que lo deje pasar
         login(usuarioEncontrado);
-        alert(`¡Bienvenido ${usuarioEncontrado.role}!`);
-        // Más adelante aquí lo enviaremos al Dashboard
+        // Quitamos el alert para que la transición sea más limpia
       } else {
         setError("Usuario o contraseña incorrectos");
       }
@@ -36,18 +59,62 @@ export default function LoginPage() {
     }
   };
 
-  // Si el usuario ya inició sesión, le mostramos un mensaje de bienvenida temporal
+  // --- VISTA PROTEGIDA: DASHBOARD ---
   if (user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
-        <h1 className="text-3xl font-bold mb-4 text-black">¡Hola, {user.username}!</h1>
-        <p className="text-lg mb-4 text-black">Tu rol es: <span className="font-bold text-blue-600">{user.role}</span></p>
-        <p className="text-gray-600">Pronto crearemos el Dashboard aquí.</p>
+      <div className="min-h-screen bg-gray-50 p-8">
+        {/* Cabecera del Dashboard */}
+        <div className="max-w-6xl mx-auto flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">Panel de Control</h1>
+            <p className="text-gray-600">
+              Bienvenido, <span className="font-semibold">{user.username}</span> | Rol: <span className="text-blue-600 font-bold uppercase">{user.role}</span>
+            </p>
+          </div>
+          
+          {/* Aquí aplicamos la regla de ROLES: Solo el gerente ve este botón */}
+          {user.role === "gerente" && (
+            <button className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-200">
+              + Crear Nuevo Proyecto
+            </button>
+          )}
+        </div>
+
+        {/* Cuadrícula de Proyectos (Responsive) */}
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {proyectos.length > 0 ? (
+            proyectos.map((proyecto) => (
+              <div key={proyecto.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition">
+                <h3 className="text-xl font-bold text-gray-800 mb-2">{proyecto.name}</h3>
+                <p className="text-gray-600 mb-4">{proyecto.description}</p>
+                
+                {/* Barra de Progreso Visual */}
+                <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                  <div 
+                    className="bg-blue-600 h-2.5 rounded-full" 
+                    style={{ width: `${proyecto.progress}%` }}
+                  ></div>
+                </div>
+                <p className="text-right text-sm text-gray-500 font-bold">{proyecto.progress}% completado</p>
+                
+                {/* Opciones de edición para gerentes */}
+                {user.role === "gerente" && (
+                  <div className="mt-4 flex gap-2">
+                    <button className="text-sm text-blue-500 hover:text-blue-700 font-semibold">Editar</button>
+                    <button className="text-sm text-red-500 hover:text-red-700 font-semibold">Eliminar</button>
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-500">Cargando proyectos o no hay proyectos disponibles...</p>
+          )}
+        </div>
       </div>
     );
   }
 
-  // Si no ha iniciado sesión, mostramos el formulario
+  // --- VISTA PÚBLICA: FORMULARIO DE LOGIN ---
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
