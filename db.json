@@ -34,6 +34,13 @@
       "title": "Diseñar logo",
       "status": "pendiente",
       "assignedTo": "2"
+    },
+    {
+      "id": "a9a6",
+      "projectId": "c6c8",
+      "title": "Tarea 1",
+      "status": "pendiente",
+      "assignedTo": "2"
     }
   ],
   "$schema": "./node_modules/json-server/schema.json"
