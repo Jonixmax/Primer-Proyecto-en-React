@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { useAuth } from "./context/AuthContext";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Cell
+import { useAuth } from "./context/AuthContext"; 
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer, Cell 
 } from 'recharts';
 
 // --- INTERFACES ---
@@ -21,6 +21,9 @@ interface Tarea {
   title: string;
   status: string;
   assignedTo: string;
+  createdAt: string;
+  dueDate: string;
+  completedAt: string | null;
 }
 
 interface Usuario {
@@ -31,17 +34,19 @@ interface Usuario {
 
 export default function DashboardPage() {
   const { login, logout, user } = useAuth();
-
+  
   // Estados de Login/Registro
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
-
+  
   // Estados de Datos
-  const [proyectos, setProyectos] = useState<Proyecto[]>([]);
+  const [proyectos, setProyectos] = useState<Proyecto[]>([]); 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-
+  const [todasLasTareas, setTodasLasTareas] = useState<Tarea[]>([]);
+  const [vistaActual, setVistaActual] = useState<"proyectos" | "mis-tareas" | "usuarios">("proyectos");
+  
   // Estados de Modales y Formularios
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [proyectoActual, setProyectoActual] = useState<Partial<Proyecto>>({ id: undefined, name: "", description: "", progress: 0 });
@@ -49,7 +54,47 @@ export default function DashboardPage() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState<Proyecto | null>(null);
-  const [nuevaTarea, setNuevaTarea] = useState({ title: "", assignedTo: "" });
+  const [nuevaTarea, setNuevaTarea] = useState({ title: "", assignedTo: "", dueDate: "" });
+
+  // Componente Tooltip personalizado para la gráfica
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const proyecto = proyectos.find(p => p.name === label);
+      if (!proyecto) return null;
+      
+      const tareasCompletadas = todasLasTareas.filter(t => 
+        t.projectId == proyecto.id && t.status === "completada"
+      );
+      
+      return (
+        <div className="bg-white border-4 border-black p-4 shadow-lg max-w-xs">
+          <p className="font-black uppercase text-lg mb-2">{label}</p>
+          <p className="font-bold text-blue-600 mb-3">Progreso: {payload[0].value}%</p>
+          
+          {tareasCompletadas.length > 0 ? (
+            <div>
+              <p className="font-black uppercase text-sm mb-2">Completadas por:</p>
+              <ul className="space-y-1">
+                {tareasCompletadas.map(tarea => {
+                  const usuario = usuarios.find(u => u.id === tarea.assignedTo);
+                  const nombreUsuario = usuario ? usuario.username : "Desconocido";
+                  return (
+                    <li key={tarea.id} className="text-xs font-bold flex justify-between">
+                      <span className="truncate mr-2">{tarea.title}</span>
+                      <span className="text-blue-600">{nombreUsuario}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-xs font-bold text-gray-500">Sin tareas completadas</p>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
 
   // Carga inicial de datos al detectar usuario
   useEffect(() => {
@@ -60,6 +105,8 @@ export default function DashboardPage() {
           setProyectos(resP.data);
           const resU = await axios.get("http://localhost:3001/users");
           setUsuarios(resU.data);
+          const resT = await axios.get("http://localhost:3001/tasks");
+          setTodasLasTareas(resT.data);
         } catch (err) {
           console.error("Error cargando datos:", err);
         }
@@ -75,13 +122,7 @@ export default function DashboardPage() {
     try {
       const res = await axios.get("http://localhost:3001/users");
       const u = res.data.find((userItem: any) => userItem.username === username && userItem.password === password);
-      if (u) {
-        login(u);
-        setUsername("");
-        setPassword("");
-      } else {
-        setError("Usuario o contraseña incorrectos");
-      }
+      if (u) login(u); else setError("Usuario o contraseña incorrectos");
     } catch { setError("Error al conectar con el servidor."); }
   };
 
@@ -124,8 +165,8 @@ export default function DashboardPage() {
 
   // --- LÓGICA DE TAREAS Y PROGRESO ---
   const calcularYGuardarProgreso = async (projectId: string | number, listaTareas: Tarea[]) => {
-    const porcentaje = listaTareas.length === 0
-      ? 0
+    const porcentaje = listaTareas.length === 0 
+      ? 0 
       : Math.round((listaTareas.filter(t => t.status === "completada").length / listaTareas.length) * 100);
 
     try {
@@ -147,16 +188,19 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!proyectoSeleccionado) return;
     try {
-      const nuevaT = {
-        projectId: String(proyectoSeleccionado.id),
-        title: nuevaTarea.title,
-        status: "pendiente",
-        assignedTo: nuevaTarea.assignedTo
+      const nuevaT = { 
+        projectId: String(proyectoSeleccionado.id), 
+        title: nuevaTarea.title, 
+        status: "pendiente", 
+        assignedTo: nuevaTarea.assignedTo,
+        createdAt: new Date().toISOString().split('T')[0],
+        dueDate: nuevaTarea.dueDate,
+        completedAt: null
       };
       const res = await axios.post("http://localhost:3001/tasks", nuevaT);
       const listaActualizada = [...tareas, res.data];
       setTareas(listaActualizada);
-      setNuevaTarea({ title: "", assignedTo: "" });
+      setNuevaTarea({ title: "", assignedTo: "", dueDate: "" });
       await calcularYGuardarProgreso(proyectoSeleccionado.id, listaActualizada);
     } catch { alert("Error al crear tarea."); }
   };
@@ -164,9 +208,16 @@ export default function DashboardPage() {
   const handleChangeTaskStatus = async (tarea: Tarea) => {
     const nuevoEstado = tarea.status === "pendiente" ? "completada" : "pendiente";
     try {
-      const res = await axios.patch(`http://localhost:3001/tasks/${tarea.id}`, { status: nuevoEstado });
+      const actualizacion = { 
+        status: nuevoEstado,
+        completedAt: nuevoEstado === "completada" ? new Date().toISOString().split('T')[0] : null
+      };
+      const res = await axios.patch(`http://localhost:3001/tasks/${tarea.id}`, actualizacion);
+      // Actualizar tareas del proyecto actual si está abierto
       const listaActualizada = tareas.map(t => t.id === tarea.id ? res.data : t);
       setTareas(listaActualizada);
+      // Actualizar todas las tareas si se cargaron
+      setTodasLasTareas(prev => prev.map(t => t.id === tarea.id ? res.data : t));
       await calcularYGuardarProgreso(tarea.projectId, listaActualizada);
     } catch { alert("Error al actualizar tarea."); }
   };
@@ -175,16 +226,21 @@ export default function DashboardPage() {
   if (user) {
     return (
       <div className="flex min-h-screen bg-gray-100 font-sans text-black">
-
+        
         {/* SIDEBAR */}
         <aside className="w-64 bg-black text-white flex flex-col p-6 border-r-4 border-black">
           <div className="mb-10">
             <h2 className="text-2xl font-black italic border-b-2 border-blue-600 pb-2">PROJECT MANAGER</h2>
           </div>
-
+          
           <nav className="flex-1 space-y-4">
-            <button className="w-full text-left font-bold hover:text-blue-400 uppercase">Inicio</button>
-            <button className="w-full text-left font-bold hover:text-blue-400 uppercase">Tareas Asignadas</button>
+            <button onClick={() => setVistaActual("proyectos")} className={`w-full text-left font-bold uppercase ${vistaActual === "proyectos" ? "text-blue-400" : "hover:text-blue-400"}`}>Inicio</button>
+            {user.role === "gerente" && (
+              <button onClick={() => setVistaActual("usuarios")} className={`w-full text-left font-bold uppercase ${vistaActual === "usuarios" ? "text-blue-400" : "hover:text-blue-400"}`}>Usuarios</button>
+            )}
+            {user.role !== "gerente" && (
+              <button onClick={() => setVistaActual("mis-tareas")} className={`w-full text-left font-bold uppercase ${vistaActual === "mis-tareas" ? "text-blue-400" : "hover:text-blue-400"}`}>Tareas Asignadas</button>
+            )}
           </nav>
 
           <div className="mt-auto pt-6 border-t border-gray-800">
@@ -198,15 +254,17 @@ export default function DashboardPage() {
 
         {/* CONTENIDO PRINCIPAL */}
         <main className="flex-1 p-8 overflow-y-auto">
-
+          
           <header className="flex justify-between items-end mb-10 border-b-4 border-black pb-4">
             <div>
-              <h1 className="text-4xl font-black uppercase tracking-tighter">Panel de Control</h1>
+              <h1 className="text-4xl font-black uppercase tracking-tighter">
+                {vistaActual === "proyectos" ? "Panel de Control" : vistaActual === "usuarios" ? "Gestión de Usuarios" : "Mis Tareas Asignadas"}
+              </h1>
               <p className="font-bold text-gray-700 uppercase">Rol: <span className="text-blue-700">{user.role}</span></p>
             </div>
-            {user.role === "gerente" && (
-              <button
-                onClick={() => { setProyectoActual({ name: "", description: "" }); setIsModalOpen(true); }}
+            {user.role === "gerente" && vistaActual === "proyectos" && (
+              <button 
+                onClick={() => { setProyectoActual({name:"", description:""}); setIsModalOpen(true); }} 
                 className="bg-green-600 text-white font-black py-3 px-6 border-b-4 border-green-900 hover:bg-green-700 transition"
               >
                 + NUEVO PROYECTO
@@ -214,58 +272,153 @@ export default function DashboardPage() {
             )}
           </header>
 
-          {/* TARJETAS DE PROYECTOS */}
-          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-            {proyectos.map((p) => (
-              <div key={p.id} className="bg-white border-4 border-black p-5 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
-                <h3 className="text-xl font-black mb-2 uppercase italic">{p.name}</h3>
-                <p className="text-sm font-bold text-gray-800 mb-4 h-12 overflow-hidden">{p.description}</p>
-
-                <div className="flex justify-between text-xs font-black mb-1 uppercase">
-                  <span>Progreso</span>
-                  <span>{p.progress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 h-6 border-2 border-black mb-4">
-                  <div className="bg-blue-600 h-full border-r-2 border-black" style={{ width: `${p.progress}%` }}></div>
-                </div>
-
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => abrirModalTareas(p)}
-                    className="bg-black text-white text-xs font-black px-4 py-2 uppercase hover:bg-gray-800"
-                  >
-                    Ver Tareas
-                  </button>
-                  {user.role === "gerente" && (
-                    <div className="ml-auto flex gap-3">
-                      <button onClick={() => { setProyectoActual(p); setIsModalOpen(true); }} className="text-xs font-black text-blue-700 hover:underline">EDITAR</button>
-                      <button onClick={() => handleDeleteProject(p.id)} className="text-xs font-black text-red-600 hover:underline">ELIMINAR</button>
+          {vistaActual === "proyectos" ? (
+            <>
+              {/* TARJETAS DE PROYECTOS */}
+              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+                {proyectos.map((p) => (
+                  <div key={p.id} className="bg-white border-4 border-black p-5 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+                    <h3 className="text-xl font-black mb-2 uppercase italic">{p.name}</h3>
+                    <p className="text-sm font-bold text-gray-800 mb-4 h-12 overflow-hidden">{p.description}</p>
+                    
+                    <div className="flex justify-between text-xs font-black mb-1 uppercase">
+                       <span>Progreso</span>
+                       <span>{p.progress}%</span>
                     </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </section>
+                    <div className="w-full bg-gray-200 h-6 border-2 border-black mb-4">
+                      <div className="bg-blue-600 h-full border-r-2 border-black" style={{ width: `${p.progress}%` }}></div>
+                    </div>
 
-          {/* GRÁFICO REAL */}
-          <section className="bg-white border-4 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
-            <h2 className="text-2xl font-black mb-8 uppercase italic border-b-2 border-black inline-block">Rendimiento General</h2>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={proyectos}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ccc" />
-                  <XAxis dataKey="name" stroke="#000" fontSize={12} fontWeight="bold" tickLine={false} />
-                  <YAxis stroke="#000" fontSize={12} fontWeight="bold" tickLine={false} unit="%" />
-                  <Tooltip cursor={{ fill: '#eee' }} contentStyle={{ border: '4px solid black', fontWeight: 'bold' }} />
-                  <Bar dataKey="progress" radius={[0, 0, 0, 0]}>
-                    {proyectos.map((entry, index) => (
-                      <Cell key={`c-${index}`} fill={entry.progress > 75 ? '#16a34a' : '#2563eb'} stroke="#000" strokeWidth={2} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={() => abrirModalTareas(p)}
+                        className="bg-black text-white text-xs font-black px-4 py-2 uppercase hover:bg-gray-800"
+                      >
+                        Ver Tareas
+                      </button>
+                      {user.role === "gerente" && (
+                        <div className="ml-auto flex gap-3">
+                          <button onClick={() => { setProyectoActual(p); setIsModalOpen(true); }} className="text-xs font-black text-blue-700 hover:underline">EDITAR</button>
+                          <button onClick={() => handleDeleteProject(p.id)} className="text-xs font-black text-red-600 hover:underline">ELIMINAR</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </section>
+
+              {/* GRÁFICO REAL - Solo para gerentes */}
+              {user.role === "gerente" && (
+                <section className="bg-white border-4 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+                  <h2 className="text-2xl font-black mb-8 uppercase italic border-b-2 border-black inline-block">Rendimiento General</h2>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={proyectos}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ccc" />
+                        <XAxis dataKey="name" stroke="#000" fontSize={12} fontWeight="bold" tickLine={false} />
+                        <YAxis stroke="#000" fontSize={12} fontWeight="bold" tickLine={false} unit="%" />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar dataKey="progress" radius={[0, 0, 0, 0]}>
+                          {proyectos.map((entry, index) => (
+                            <Cell key={`c-${index}`} fill={entry.progress > 75 ? '#16a34a' : '#2563eb'} stroke="#000" strokeWidth={2} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+              )}
+            </>
+          ) : vistaActual === "usuarios" ? (
+            /* GESTIÓN DE USUARIOS */
+            <section className="space-y-6">
+              <h2 className="text-2xl font-black uppercase italic border-b-2 border-black inline-block mb-8">Usuarios del Sistema</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {usuarios.filter(u => u.role !== "gerente").map((usuario) => {
+                  const tareasUsuario = todasLasTareas.filter(t => t.assignedTo === usuario.id);
+                  const tareasPendientes = tareasUsuario.filter(t => t.status === "pendiente").length;
+                  const tareasCompletadas = tareasUsuario.filter(t => t.status === "completada").length;
+                  const totalTareas = tareasUsuario.length;
+                  
+                  return (
+                    <div key={usuario.id} className="bg-white border-4 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-xl font-black uppercase italic">{usuario.username}</h3>
+                          <p className="text-sm font-bold text-gray-600 uppercase">Rol: {usuario.role}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-black text-blue-600">{totalTareas}</p>
+                          <p className="text-xs font-bold uppercase">Total Tareas</p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold uppercase text-sm">Pendientes</span>
+                          <span className="bg-yellow-400 text-black font-black px-3 py-1 border-2 border-black">{tareasPendientes}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold uppercase text-sm">Completadas</span>
+                          <span className="bg-green-500 text-white font-black px-3 py-1 border-2 border-black">{tareasCompletadas}</span>
+                        </div>
+                      </div>
+                      
+                      {totalTareas > 0 && (
+                        <div className="mt-4 pt-4 border-t-2 border-black">
+                          <div className="w-full bg-gray-200 h-4 border-2 border-black">
+                            <div 
+                              className="bg-green-500 h-full border-r-2 border-black" 
+                              style={{ width: totalTareas > 0 ? `${(tareasCompletadas / totalTareas) * 100}%` : '0%' }}
+                            ></div>
+                          </div>
+                          <p className="text-xs font-bold uppercase text-center mt-2">
+                            {totalTareas > 0 ? Math.round((tareasCompletadas / totalTareas) * 100) : 0}% Completado
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : (
+            /* MIS TAREAS */
+            <section className="space-y-6">
+              <h2 className="text-2xl font-black uppercase italic border-b-2 border-black inline-block mb-8">Mis Tareas Asignadas</h2>
+              {todasLasTareas.filter(t => t.assignedTo === user.id).length === 0 ? (
+                <p className="text-center text-gray-500 font-bold uppercase">No tienes tareas asignadas</p>
+              ) : (
+                todasLasTareas.filter(t => t.assignedTo === user.id).map(tarea => {
+                  const proyecto = proyectos.find(p => p.id == tarea.projectId);
+                  const nombreProyecto = proyecto ? proyecto.name : "Proyecto desconocido";
+                  const hoy = new Date().toISOString().split('T')[0];
+                  const estaAtrasada = tarea.dueDate < hoy && tarea.status === "pendiente";
+                  
+                  return (
+                    <div key={tarea.id} className={`bg-white border-4 border-black p-5 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] ${estaAtrasada ? "bg-red-50" : ""}`}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-xl font-black uppercase italic">{tarea.title}</h3>
+                          <p className="text-sm font-bold text-gray-600 uppercase">Proyecto: {nombreProyecto}</p>
+                        </div>
+                        <button 
+                          onClick={() => handleChangeTaskStatus(tarea)} 
+                          className={`text-xs font-black px-4 py-2 border-2 border-black uppercase transition ${tarea.status === "completada" ? "bg-green-500" : "bg-yellow-400"}`}
+                        >
+                          {tarea.status}
+                        </button>
+                      </div>
+                      <p className={`text-sm font-bold uppercase ${estaAtrasada ? "text-red-600" : "text-gray-600"}`}>
+                        Vencimiento: {new Date(tarea.dueDate).toLocaleDateString('es-ES')} 
+                        {estaAtrasada && " ⚠️ ATRASADA"}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </section>
+          )}
 
         </main>
 
@@ -277,11 +430,11 @@ export default function DashboardPage() {
               <form onSubmit={handleSaveProject} className="space-y-4">
                 <div>
                   <label className="block text-sm font-black uppercase mb-1">Nombre</label>
-                  <input type="text" className="w-full p-2 border-2 border-black font-bold outline-none" value={proyectoActual.name} onChange={e => setProyectoActual({ ...proyectoActual, name: e.target.value })} required />
+                  <input type="text" className="w-full p-2 border-2 border-black font-bold outline-none" value={proyectoActual.name} onChange={e => setProyectoActual({...proyectoActual, name: e.target.value})} required />
                 </div>
                 <div>
                   <label className="block text-sm font-black uppercase mb-1">Descripción</label>
-                  <textarea className="w-full p-2 border-2 border-black font-bold outline-none" rows={3} value={proyectoActual.description} onChange={e => setProyectoActual({ ...proyectoActual, description: e.target.value })} required />
+                  <textarea className="w-full p-2 border-2 border-black font-bold outline-none" rows={3} value={proyectoActual.description} onChange={e => setProyectoActual({...proyectoActual, description: e.target.value})} required />
                 </div>
                 <div className="flex justify-end gap-4 pt-4">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="font-black uppercase text-sm hover:underline">Cancelar</button>
@@ -304,36 +457,50 @@ export default function DashboardPage() {
               {user.role === "gerente" && (
                 <form onSubmit={handleCreateTask} className="mb-10 bg-gray-100 p-5 border-2 border-black">
                   <h3 className="font-black uppercase text-sm mb-4">Asignar Nueva Tarea</h3>
-                  <div className="flex gap-2">
-                    <input type="text" placeholder="TÍTULO" className="flex-1 p-2 border-2 border-black font-bold text-black placeholder-gray-500 outline-none" value={nuevaTarea.title} onChange={e => setNuevaTarea({ ...nuevaTarea, title: e.target.value })} required />
-                    <select className="p-2 border-2 border-black bg-white font-bold text-black outline-none" value={nuevaTarea.assignedTo} onChange={e => setNuevaTarea({ ...nuevaTarea, assignedTo: e.target.value })} required>
+                  <div className="flex gap-2 mb-3">
+                    <input type="text" placeholder="TÍTULO" className="flex-1 p-2 border-2 border-black font-bold text-black placeholder-gray-500 outline-none" value={nuevaTarea.title} onChange={e => setNuevaTarea({...nuevaTarea, title: e.target.value})} required />
+                    <select className="p-2 border-2 border-black bg-white font-bold text-black outline-none" value={nuevaTarea.assignedTo} onChange={e => setNuevaTarea({...nuevaTarea, assignedTo: e.target.value})} required>
                       <option value="">ASIGNAR A...</option>
                       {usuarios.filter(u => u.role === "usuario").map(u => (
                         <option key={u.id} value={u.id}>{u.username}</option>
                       ))}
                     </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <input type="date" className="flex-1 p-2 border-2 border-black font-bold text-black outline-none" value={nuevaTarea.dueDate} onChange={e => setNuevaTarea({...nuevaTarea, dueDate: e.target.value})} required />
                     <button type="submit" className="bg-blue-600 text-white px-6 font-black uppercase border-b-4 border-blue-900">Crear</button>
                   </div>
                 </form>
               )}
 
               <div className="space-y-4">
-                {tareas.filter(t => user.role === "gerente" || t.assignedTo === user.id).map(tarea => (
-                  <div key={tarea.id} className="flex justify-between items-center p-4 border-2 border-black bg-white hover:bg-yellow-50">
-                    <div>
-                      <p className={`font-black uppercase ${tarea.status === "completada" ? "line-through text-gray-400" : "text-black"}`}>{tarea.title}</p>
-                      {user.role === "gerente" && (
-                        <p className="text-xs font-bold text-gray-600 uppercase">Responsable ID: {tarea.assignedTo}</p>
-                      )}
+                {tareas.filter(t => user.role === "gerente" || t.assignedTo === user.id).map(tarea => {
+                  const hoy = new Date().toISOString().split('T')[0];
+                  const estaAtrasada = tarea.dueDate < hoy && tarea.status === "pendiente";
+                  const responsable = usuarios.find(u => u.id === tarea.assignedTo);
+                  const nombreResponsable = responsable ? responsable.username : "Desconocido";
+                  
+                  return (
+                    <div key={tarea.id} className={`flex justify-between items-center p-4 border-2 border-black ${estaAtrasada ? "bg-red-100" : "bg-white"} hover:bg-yellow-50`}>
+                      <div>
+                        <p className={`font-black uppercase ${tarea.status === "completada" ? "line-through text-gray-400" : "text-black"}`}>{tarea.title}</p>
+                        <p className={`text-xs font-bold uppercase ${estaAtrasada ? "text-red-600" : "text-gray-600"}`}>
+                          Vencimiento: {new Date(tarea.dueDate).toLocaleDateString('es-ES')} 
+                          {estaAtrasada && " ⚠️ ATRASADA"}
+                        </p>
+                        {user.role === "gerente" && (
+                          <p className="text-xs font-bold text-gray-600 uppercase">Responsable: {nombreResponsable}</p>
+                        )}
+                      </div>
+                      <button 
+                        onClick={() => handleChangeTaskStatus(tarea)} 
+                        className={`text-xs font-black px-4 py-2 border-2 border-black uppercase transition ${tarea.status === "completada" ? "bg-green-500" : "bg-yellow-400"}`}
+                      >
+                        {tarea.status}
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleChangeTaskStatus(tarea)}
-                      className={`text-xs font-black px-4 py-2 border-2 border-black uppercase transition ${tarea.status === "completada" ? "bg-green-500" : "bg-yellow-400"}`}
-                    >
-                      {tarea.status}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -350,7 +517,7 @@ export default function DashboardPage() {
           {isRegistering ? "Registro" : "Login"}
         </h2>
         {error && <p className="bg-red-100 border-2 border-red-600 text-red-600 font-bold p-2 mb-6 text-center text-sm">{error}</p>}
-
+        
         <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-6">
           <div>
             <label className="block text-xs font-black uppercase mb-1">Usuario</label>
@@ -365,7 +532,7 @@ export default function DashboardPage() {
           </button>
         </form>
 
-        <button
+        <button 
           onClick={() => { setIsRegistering(!isRegistering); setError(""); }}
           className="w-full mt-8 text-xs font-black uppercase hover:underline tracking-widest"
         >
