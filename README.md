@@ -86,13 +86,6 @@ Sigue estos pasos para correr el proyecto en tu propia máquina:
 <img width="1655" height="883" alt="image" src="https://github.com/user-attachments/assets/a5b3898a-39c0-4d8a-b7dc-446c59ba0762" />
 
 
-
-
-### 1. Pantalla de Login
-![Login]() ### 2. Dashboard del Gerente (Proyectos y Validaciones)
-![Dashboard Gerente]() ### 3. Panel de Usuario (Mis Tareas Asignadas)
-![Panel Usuario]() ---
-
 ## 🌐 Enlaces de Despliegue
 
 Para garantizar el funcionamiento completo del proyecto en producción, se ha separado el entorno visual (Frontend) de la base de datos (Backend):
