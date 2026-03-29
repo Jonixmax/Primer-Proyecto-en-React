@@ -15,60 +15,64 @@
   ],
   "projects": [
     {
-      "id": "1",
+      "id": "a1b1",
       "name": "Sitio Web",
-      "description": "Crear landing page",
+      "description": "Crear landing page y formulario de contacto",
       "progress": 100
     },
     {
-      "id": "c6c8",
+      "id": "b2c2",
       "name": "Rediseño de la App",
-      "description": "Rediseñar la App creada para darle un mejor estilo al cliente ",
-      "progress": 0
+      "description": "Rediseñar la App creada para darle un mejor estilo al cliente",
+      "progress": 100
     },
     {
-      "id": "91bc",
+      "id": "c3d3",
       "name": "Primer proyecto en React",
-      "description": "Desarrollar un proyecto en react",
-      "progress": 0
+      "description": "Desarrollar un dashboard interactivo en React",
+      "progress": 100
     }
   ],
   "tasks": [
     {
-      "id": "1",
-      "projectId": "1",
-      "title": "Diseñar logo",
-      "status": "pendiente",
+      "id": "f1a1",
+      "projectId": "a1b1",
+      "title": "Diseñar logo principal",
       "assignedTo": "2",
+      "dueDate": "2026-03-28",
+      "status": "pendiente",
+      "createdAt": "2026-03-25",
       "completedAt": null
     },
     {
-      "id": "a9a6",
-      "projectId": "c6c8",
-      "title": "Tarea 1",
-      "status": "pendiente",
+      "id": "f2b2",
+      "projectId": "b2c2",
+      "title": "Crear mockups en Figma",
       "assignedTo": "2",
-      "completedAt": null
+      "dueDate": "2026-04-05",
+      "status": "finalizada",
+      "createdAt": "2026-03-28",
+      "completedAt": "2026-03-29"
     },
     {
-      "id": "afc9",
-      "projectId": null,
-      "title": "Prueba objetiva 1",
+      "id": "f3c3",
+      "projectId": "b2c2",
+      "title": "Programar interfaz (UI)",
       "assignedTo": "2",
-      "dueDate": "2026-03-31",
-      "status": "completada",
+      "dueDate": "2026-04-10",
+      "status": "finalizada",
       "createdAt": "2026-03-29",
       "completedAt": "2026-03-29"
     },
     {
-      "id": "2785",
-      "projectId": "91bc",
-      "title": "Proyecto en React",
+      "id": "f4d4",
+      "projectId": "c3d3",
+      "title": "Implementar AuthContext",
       "assignedTo": "2",
-      "dueDate": "2026-04-11",
-      "status": "pendiente",
+      "dueDate": "2026-04-15",
+      "status": "finalizada",
       "createdAt": "2026-03-29",
-      "completedAt": null
+      "completedAt": "2026-03-29"
     }
   ],
   "$schema": "./node_modules/json-server/schema.json"
