@@ -33,7 +33,7 @@ interface Usuario {
 }
 
 export default function DashboardPage() {
-  const { login, logout, user } = useAuth();
+  const { login, logout, user, loading } = useAuth();
 
   // Estados de Login/Registro
   const [username, setUsername] = useState("");
@@ -55,6 +55,9 @@ export default function DashboardPage() {
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [proyectoSeleccionado, setProyectoSeleccionado] = useState<Proyecto | null>(null);
   const [nuevaTarea, setNuevaTarea] = useState({ title: "", assignedTo: "", dueDate: "" });
+  
+  // ESTADO PARA EDICIÓN DE TAREAS
+  const [tareaEditandoId, setTareaEditandoId] = useState<string | number | null>(null);
 
   // Componente Tooltip personalizado para la gráfica
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -67,7 +70,7 @@ export default function DashboardPage() {
       );
 
       return (
-        <div className="bg-white border-4 border-black p-4 shadow-lg max-w-xs">
+        <div className="bg-white border-4 border-black p-4 shadow-lg max-w-xs z-50">
           <p className="font-black uppercase text-lg mb-2">{label}</p>
           <p className="font-bold text-blue-600 mb-3">Progreso: {payload[0].value}%</p>
 
@@ -101,11 +104,13 @@ export default function DashboardPage() {
     if (user) {
       const cargarDatos = async () => {
         try {
-          const resP = await axios.get("http://localhost:3001/projects");
+          const [resP, resU, resT] = await Promise.all([
+            axios.get("http://localhost:3001/projects"),
+            axios.get("http://localhost:3001/users"),
+            axios.get("http://localhost:3001/tasks")
+          ]);
           setProyectos(resP.data);
-          const resU = await axios.get("http://localhost:3001/users");
           setUsuarios(resU.data);
-          const resT = await axios.get("http://localhost:3001/tasks");
           setTodasLasTareas(resT.data);
         } catch (err) {
           console.error("Error cargando datos:", err);
@@ -183,6 +188,8 @@ export default function DashboardPage() {
 
   const abrirModalTareas = async (proyecto: Proyecto) => {
     setProyectoSeleccionado(proyecto);
+    setTareaEditandoId(null); // Reset edición al abrir
+    setNuevaTarea({ title: "", assignedTo: "", dueDate: "" });
     try {
       const res = await axios.get(`http://localhost:3001/tasks?projectId=${proyecto.id}`);
       setTareas(res.data);
@@ -190,26 +197,45 @@ export default function DashboardPage() {
     } catch { alert("Error al cargar tareas."); }
   };
 
-  const handleCreateTask = async (e: React.FormEvent) => {
+  // FUNCIÓN UNIFICADA PARA GUARDAR TAREA (CREAR O EDITAR)
+  const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!proyectoSeleccionado) return;
+    
     try {
-      const nuevaT = {
+      const datosTarea = {
         projectId: String(proyectoSeleccionado.id),
         title: nuevaTarea.title,
-        status: "pendiente",
         assignedTo: nuevaTarea.assignedTo,
-        createdAt: new Date().toISOString().split('T')[0],
         dueDate: nuevaTarea.dueDate,
-        completedAt: null
       };
-      const res = await axios.post("http://localhost:3001/tasks", nuevaT);
-      const listaActualizada = [...tareas, res.data];
-      setTareas(listaActualizada);
+
+      if (tareaEditandoId) {
+        // ACTUALIZAR (PATCH)
+        const res = await axios.patch(`http://localhost:3001/tasks/${tareaEditandoId}`, datosTarea);
+        const listaActualizada = tareas.map(t => t.id === tareaEditandoId ? res.data : t);
+        setTareas(listaActualizada);
+        setTodasLasTareas(prev => prev.map(t => t.id === tareaEditandoId ? res.data : t));
+        setTareaEditandoId(null);
+        await calcularYGuardarProgreso(proyectoSeleccionado.id, listaActualizada);
+        alert("¡Tarea actualizada!");
+      } else {
+        // CREAR (POST)
+        const nuevaTCompleta = {
+          ...datosTarea,
+          status: "pendiente",
+          createdAt: new Date().toISOString().split('T')[0],
+          completedAt: null
+        };
+        const res = await axios.post("http://localhost:3001/tasks", nuevaTCompleta);
+        const listaActualizada = [...tareas, res.data];
+        setTareas(listaActualizada);
+        setTodasLasTareas(prev => [...prev, res.data]);
+        await calcularYGuardarProgreso(proyectoSeleccionado.id, listaActualizada);
+        alert("¡Tarea creada!");
+      }
       setNuevaTarea({ title: "", assignedTo: "", dueDate: "" });
-      await calcularYGuardarProgreso(proyectoSeleccionado.id, listaActualizada);
-      alert("¡Tarea creada y asignada con éxito!");
-    } catch { alert("Error al crear tarea."); }
+    } catch { alert("Error al guardar tarea."); }
   };
 
   const handleChangeTaskStatus = async (tarea: Tarea) => {
@@ -220,10 +246,8 @@ export default function DashboardPage() {
         completedAt: nuevoEstado === "completada" ? new Date().toISOString().split('T')[0] : null
       };
       const res = await axios.patch(`http://localhost:3001/tasks/${tarea.id}`, actualizacion);
-      // Actualizar tareas del proyecto actual si está abierto
       const listaActualizada = tareas.map(t => t.id === tarea.id ? res.data : t);
       setTareas(listaActualizada);
-      // Actualizar todas las tareas si se cargaron
       setTodasLasTareas(prev => prev.map(t => t.id === tarea.id ? res.data : t));
       await calcularYGuardarProgreso(tarea.projectId, listaActualizada);
     } catch { alert("Error al actualizar tarea."); }
@@ -232,21 +256,24 @@ export default function DashboardPage() {
   const handleDeleteTask = async (id: string | number, projectId: string | number) => {
     if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
     try {
-      // 1. Eliminamos de la base de datos
       await axios.delete(`http://localhost:3001/tasks/${id}`);
-
-      // 2. Actualizamos la lista de la pantalla
       const listaActualizada = tareas.filter(t => t.id !== id);
       setTareas(listaActualizada);
-
-      // 3. ¡Recalculamos el progreso del proyecto!
+      setTodasLasTareas(prev => prev.filter(t => t.id !== id));
       await calcularYGuardarProgreso(projectId, listaActualizada);
-    } catch {
-      alert("Error al eliminar la tarea.");
-    }
+    } catch { alert("Error al eliminar la tarea."); }
   };
 
-  // --- RENDERIZADO DEL DASHBOARD (DISEÑO A MANO) ---
+  // --- RENDERIZADO DE CARGA ---
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-300">
+        <div className="text-2xl font-black uppercase italic animate-pulse">Cargando Sesión...</div>
+      </div>
+    );
+  }
+
+  // --- RENDERIZADO DEL DASHBOARD ---
   if (user) {
     return (
       <div className="flex min-h-screen bg-gray-100 font-sans text-black">
@@ -331,7 +358,7 @@ export default function DashboardPage() {
                 ))}
               </section>
 
-              {/* GRÁFICO REAL - Solo para gerentes */}
+              {/* GRÁFICA REAL INTEGRADA */}
               {user.role === "gerente" && (
                 <section className="bg-white border-4 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
                   <h2 className="text-2xl font-black mb-8 uppercase italic border-b-2 border-black inline-block">Rendimiento General</h2>
@@ -451,6 +478,7 @@ export default function DashboardPage() {
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
             <div className="bg-white border-4 border-black p-8 w-full max-w-md shadow-[15px_15px_0px_0px_rgba(0,0,0,1)]">
               <h2 className="text-2xl font-black mb-6 uppercase italic">{proyectoActual.id ? "Editar" : "Nuevo"} Proyecto</h2>
+              
               <form onSubmit={handleSaveProject} className="space-y-4">
                 <div>
                   <label className="block text-sm font-black uppercase mb-1">Nombre</label>
@@ -469,18 +497,22 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* MODAL TAREAS */}
+        {/* MODAL TAREAS RESTAURADO Y COMPLETO */}
         {isTaskModalOpen && proyectoSeleccionado && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
             <div className="bg-white border-4 border-black p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-[15px_15px_0px_0px_rgba(0,0,0,1)]">
+              
               <div className="flex justify-between items-center mb-8 border-b-4 border-black pb-4">
                 <h2 className="text-2xl font-black uppercase italic">Tareas: {proyectoSeleccionado.name}</h2>
                 <button onClick={() => setIsTaskModalOpen(false)} className="text-3xl font-black hover:text-red-600">&times;</button>
               </div>
 
+              {/* FORMULARIO DE TAREAS */}
               {user.role === "gerente" && (
-                <form onSubmit={handleCreateTask} className="mb-10 bg-gray-100 p-5 border-2 border-black">
-                  <h3 className="font-black uppercase text-sm mb-4">Asignar Nueva Tarea</h3>
+                <form onSubmit={handleSaveTask} className="mb-10 bg-gray-100 p-5 border-2 border-black">
+                  <h3 className="font-black uppercase text-sm mb-4">
+                    {tareaEditandoId ? "📝 Editar Tarea" : "➕ Asignar Nueva Tarea"}
+                  </h3>
                   <div className="flex gap-2 mb-3">
                     <input type="text" placeholder="TÍTULO" className="flex-1 p-2 border-2 border-black font-bold text-black placeholder-gray-500 outline-none" value={nuevaTarea.title} onChange={e => setNuevaTarea({ ...nuevaTarea, title: e.target.value })} required />
                     <select className="p-2 border-2 border-black bg-white font-bold text-black outline-none" value={nuevaTarea.assignedTo} onChange={e => setNuevaTarea({ ...nuevaTarea, assignedTo: e.target.value })} required>
@@ -490,13 +522,25 @@ export default function DashboardPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="flex gap-2">
-                    <input type="date" className="flex-1 p-2 border-2 border-black font-bold text-black outline-none" value={nuevaTarea.dueDate} onChange={e => setNuevaTarea({ ...nuevaTarea, dueDate: e.target.value })} required />
-                    <button type="submit" className="bg-blue-600 text-white px-6 font-black uppercase border-b-4 border-blue-900">Crear</button>
+                  <div className="flex gap-2 items-center">
+                   <input type="date" min={new Date().toISOString().split('T')[0]} className="flex-1 p-2 border-2 border-black font-bold text-black outline-none" value={nuevaTarea.dueDate} onChange={e => setNuevaTarea({ ...nuevaTarea, dueDate: e.target.value })} required />
+                    <button type="submit" className="bg-blue-600 text-white px-6 py-2 font-black uppercase border-b-4 border-blue-900">
+                      {tareaEditandoId ? "Actualizar" : "Crear"}
+                    </button>
+                    {tareaEditandoId && (
+                      <button 
+                        type="button" 
+                        onClick={() => { setTareaEditandoId(null); setNuevaTarea({ title: "", assignedTo: "", dueDate: "" }); }}
+                        className="text-xs font-black uppercase underline ml-2"
+                      >
+                        Cancelar
+                      </button>
+                    )}
                   </div>
                 </form>
               )}
 
+              {/* LISTA DE TAREAS */}
               <div className="space-y-4">
                 {tareas.filter(t => user.role === "gerente" || t.assignedTo === user.id).map(tarea => {
                   const hoy = new Date().toISOString().split('T')[0];
@@ -506,7 +550,7 @@ export default function DashboardPage() {
 
                   return (
                     <div key={tarea.id} className={`flex justify-between items-center p-4 border-2 border-black ${estaAtrasada ? "bg-red-100" : "bg-white"} hover:bg-yellow-50`}>
-                      <div>
+                      <div className="flex-1">
                         <p className={`font-black uppercase ${tarea.status === "completada" ? "line-through text-gray-400" : "text-black"}`}>{tarea.title}</p>
                         <p className={`text-xs font-bold uppercase ${estaAtrasada ? "text-red-600" : "text-gray-600"}`}>
                          Vencimiento: {new Date(tarea.dueDate).toLocaleDateString('es-ES', { timeZone: 'UTC' })}
@@ -517,28 +561,38 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      {/* ESTA ES LA SECCIÓN QUE CAMBIÓ: AHORA INCLUYE EL BOTÓN DE ELIMINAR */}
                       <div className="flex gap-2 items-center">
+                        {/* Botón Cambiar Estado */}
                         <button
                           onClick={() => handleChangeTaskStatus(tarea)}
                           className={`text-xs font-black px-4 py-2 border-2 border-black uppercase transition ${tarea.status === "completada" ? "bg-green-500" : "bg-yellow-400"}`}
                         >
                           {tarea.status}
                         </button>
-
-                        {/* NUEVO BOTÓN DE ELIMINAR (Solo para gerente) */}
+                        
+                        {/* Botones Editar y Eliminar (Solo Gerente) */}
                         {user.role === "gerente" && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTask(tarea.id, tarea.projectId)}
-                            className="text-xs font-black text-red-600 hover:text-white hover:bg-red-600 px-3 py-2 border-2 border-red-600 transition uppercase"
-                          >
-                            Eliminar
-                          </button>
+                          <div className="flex gap-2">
+                             <button
+                              type="button"
+                              onClick={() => {
+                                setTareaEditandoId(tarea.id);
+                                setNuevaTarea({ title: tarea.title, assignedTo: tarea.assignedTo, dueDate: tarea.dueDate });
+                              }}
+                              className="text-xs font-black text-blue-600 hover:text-white hover:bg-blue-600 px-3 py-2 border-2 border-blue-600 transition uppercase"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTask(tarea.id, tarea.projectId)}
+                              className="text-xs font-black text-red-600 hover:text-white hover:bg-red-600 px-3 py-2 border-2 border-red-600 transition uppercase"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
                         )}
                       </div>
-                      {/* FIN DE LA SECCIÓN MODIFICADA */}
-
                     </div>
                   );
                 })}
