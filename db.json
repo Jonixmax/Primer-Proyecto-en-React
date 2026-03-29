@@ -18,12 +18,18 @@
       "id": "1",
       "name": "Sitio Web",
       "description": "Crear landing page",
-      "progress": 50
+      "progress": 100
     },
     {
       "id": "c6c8",
       "name": "Rediseño de la App",
       "description": "Rediseñar la App creada para darle un mejor estilo al cliente ",
+      "progress": 0
+    },
+    {
+      "id": "91bc",
+      "name": "Primer proyecto en React",
+      "description": "Desarrollar un proyecto en react",
       "progress": 0
     }
   ],
@@ -33,14 +39,36 @@
       "projectId": "1",
       "title": "Diseñar logo",
       "status": "pendiente",
-      "assignedTo": "2"
+      "assignedTo": "2",
+      "completedAt": null
     },
     {
       "id": "a9a6",
       "projectId": "c6c8",
       "title": "Tarea 1",
       "status": "pendiente",
-      "assignedTo": "2"
+      "assignedTo": "2",
+      "completedAt": null
+    },
+    {
+      "id": "afc9",
+      "projectId": null,
+      "title": "Prueba objetiva 1",
+      "assignedTo": "2",
+      "dueDate": "2026-03-31",
+      "status": "completada",
+      "createdAt": "2026-03-29",
+      "completedAt": "2026-03-29"
+    },
+    {
+      "id": "2785",
+      "projectId": "91bc",
+      "title": "Proyecto en React",
+      "assignedTo": "2",
+      "dueDate": "2026-04-11",
+      "status": "pendiente",
+      "createdAt": "2026-03-29",
+      "completedAt": null
     }
   ],
   "$schema": "./node_modules/json-server/schema.json"

@@ -1,17 +1,28 @@
 "use client";
 import { createContext, useContext, useState, useEffect } from "react";
 
-
 const AuthContext = createContext<any>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState(null);
+  // Agregamos este estado para controlar la espera del localStorage
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Buscamos si hay sesión al cargar la app
     const userGuardado = localStorage.getItem("userSession");
+    
     if (userGuardado) {
-      setUser(JSON.parse(userGuardado));
+      try {
+        setUser(JSON.parse(userGuardado));
+      } catch (error) {
+        console.error("Error al parsear la sesión:", error);
+        localStorage.removeItem("userSession");
+      }
     }
+    
+    // 2. IMPORTANTE: Una vez que revisamos (haya o no usuario), dejamos de cargar
+    setLoading(false);
   }, []);
 
   const login = (datosUsuario: any) => {
@@ -25,7 +36,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      logout, 
+      loading, // Exportamos loading para que page.tsx lo use
+      isAuthenticated: !!user 
+    }}>
       {children}
     </AuthContext.Provider>
   );
