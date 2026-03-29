@@ -99,18 +99,61 @@ export default function DashboardPage() {
     return null;
   };
 
+// Función para dibujar el botón correcto según el estado
+  const renderizarBotonEstado = (tarea: Tarea) => {
+    if (tarea.status === "pendiente") {
+      return (
+        <button onClick={() => handleChangeTaskStatus(tarea)} className="text-xs font-black px-4 py-2 border-2 border-black uppercase transition bg-yellow-400 hover:bg-yellow-500">
+          Pendiente
+        </button>
+      );
+    }
+    
+    if (tarea.status === "completada") {
+      if (user.role === "gerente") {
+        return (
+          <button onClick={() => handleChangeTaskStatus(tarea)} className="text-xs font-black px-4 py-2 border-2 border-green-600 bg-green-100 text-green-700 uppercase hover:bg-green-600 hover:text-white transition">
+            ✓ Validar Tarea
+          </button>
+        );
+      } else {
+        return (
+          <button onClick={() => handleChangeTaskStatus(tarea)} title="Haz clic para deshacer y regresar a Pendiente" className="text-xs font-black px-4 py-2 border-2 border-blue-600 bg-blue-100 text-blue-600 uppercase hover:bg-blue-600 hover:text-white transition">
+            ⏳ En Revisión
+          </button>
+        );
+      }
+    }
+
+    // ¡NUEVO! Estado FINALIZADA
+    if (user.role === "gerente") {
+      return (
+        <button onClick={() => handleChangeTaskStatus(tarea)} title="Reabrir tarea" className="text-xs font-black px-4 py-2 border-2 border-red-600 bg-red-100 text-red-600 uppercase hover:bg-red-600 hover:text-white transition">
+          Finalizada ⟲
+        </button>
+      );
+    } else {
+      return (
+        <span className="text-xs font-black px-4 py-2 border-2 border-red-600 bg-red-100 text-red-600 uppercase cursor-not-allowed">
+          Finalizada
+        </span>
+      );
+    }
+  };
   // Carga inicial de datos al detectar usuario
+// Carga inicial de datos al detectar usuario
   useEffect(() => {
     if (user) {
+      // ¡NUEVO! Reseteamos la vista a la pestaña principal siempre que alguien inicia sesión
+      setVistaActual("proyectos"); 
+      
       const cargarDatos = async () => {
         try {
-          const [resP, resU, resT] = await Promise.all([
-            axios.get("http://localhost:3001/projects"),
-            axios.get("http://localhost:3001/users"),
-            axios.get("http://localhost:3001/tasks")
-          ]);
+          const resP = await axios.get("http://localhost:3001/projects");
           setProyectos(resP.data);
+          const resU = await axios.get("http://localhost:3001/users");
           setUsuarios(resU.data);
+          const resT = await axios.get("http://localhost:3001/tasks");
           setTodasLasTareas(resT.data);
         } catch (err) {
           console.error("Error cargando datos:", err);
@@ -175,10 +218,11 @@ export default function DashboardPage() {
   };
 
   // --- LÓGICA DE TAREAS Y PROGRESO ---
-  const calcularYGuardarProgreso = async (projectId: string | number, listaTareas: Tarea[]) => {
-    const porcentaje = listaTareas.length === 0
-      ? 0
-      : Math.round((listaTareas.filter(t => t.status === "completada").length / listaTareas.length) * 100);
+const calcularYGuardarProgreso = async (projectId: string | number, listaTareas: Tarea[]) => {
+    const porcentaje = listaTareas.length === 0 
+      ? 0 
+      //  Sumamos tanto las completadas como las finalizadas
+      : Math.round((listaTareas.filter(t => t.status === "completada" || t.status === "finalizada").length / listaTareas.length) * 100);
 
     try {
       await axios.patch(`http://localhost:3001/projects/${projectId}`, { progress: porcentaje });
@@ -238,14 +282,32 @@ export default function DashboardPage() {
     } catch { alert("Error al guardar tarea."); }
   };
 
-  const handleChangeTaskStatus = async (tarea: Tarea) => {
-    const nuevoEstado = tarea.status === "pendiente" ? "completada" : "pendiente";
+const handleChangeTaskStatus = async (tarea: Tarea) => {
+    let nuevoEstado = tarea.status;
+
+    // Lógica del flujo de trabajo:
+    if (tarea.status === "pendiente") {
+      nuevoEstado = "completada"; // Pasa a revisión
+    } else if (tarea.status === "completada") {
+      if (user.role === "gerente") {
+        nuevoEstado = "finalizada"; // Gerente aprueba
+      } else {
+        nuevoEstado = "pendiente"; // Usuario la regresa
+      }
+    } else if (tarea.status === "finalizada" && user.role === "gerente") {
+      // ¡NUEVO! Súper poder del gerente para reabrir tareas finalizadas
+      nuevoEstado = "pendiente"; 
+    } else {
+      return; // Si es usuario normal y está finalizada, no hace nada
+    }
+
     try {
-      const actualizacion = {
+      const actualizacion = { 
         status: nuevoEstado,
-        completedAt: nuevoEstado === "completada" ? new Date().toISOString().split('T')[0] : null
+        completedAt: nuevoEstado === "completada" || nuevoEstado === "finalizada" ? new Date().toISOString().split('T')[0] : null
       };
       const res = await axios.patch(`http://localhost:3001/tasks/${tarea.id}`, actualizacion);
+      
       const listaActualizada = tareas.map(t => t.id === tarea.id ? res.data : t);
       setTareas(listaActualizada);
       setTodasLasTareas(prev => prev.map(t => t.id === tarea.id ? res.data : t));
@@ -253,15 +315,24 @@ export default function DashboardPage() {
     } catch { alert("Error al actualizar tarea."); }
   };
 
-  const handleDeleteTask = async (id: string | number, projectId: string | number) => {
+const handleDeleteTask = async (id: string | number, projectId: string | number) => {
     if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
     try {
+      // 1. Eliminamos de la base de datos
       await axios.delete(`http://localhost:3001/tasks/${id}`);
+      
+      // 2. Actualizamos la lista del modal
       const listaActualizada = tareas.filter(t => t.id !== id);
       setTareas(listaActualizada);
+
+      // ¡NUEVO! 3. Actualizamos la lista maestra general
       setTodasLasTareas(prev => prev.filter(t => t.id !== id));
+      
+      // 4. Recalculamos el progreso del proyecto
       await calcularYGuardarProgreso(projectId, listaActualizada);
-    } catch { alert("Error al eliminar la tarea."); }
+    } catch { 
+      alert("Error al eliminar la tarea."); 
+    }
   };
 
   // --- RENDERIZADO DE CARGA ---
@@ -325,37 +396,51 @@ export default function DashboardPage() {
 
           {vistaActual === "proyectos" ? (
             <>
-              {/* TARJETAS DE PROYECTOS */}
+{/* TARJETAS DE PROYECTOS */}
               <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-                {proyectos.map((p) => (
-                  <div key={p.id} className="bg-white border-4 border-black p-5 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
-                    <h3 className="text-xl font-black mb-2 uppercase italic">{p.name}</h3>
-                    <p className="text-sm font-bold text-gray-800 mb-4 h-12 overflow-hidden">{p.description}</p>
-
-                    <div className="flex justify-between text-xs font-black mb-1 uppercase">
-                      <span>Progreso</span>
-                      <span>{p.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 h-6 border-2 border-black mb-4">
-                      <div className="bg-blue-600 h-full border-r-2 border-black" style={{ width: `${p.progress}%` }}></div>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <button
-                        onClick={() => abrirModalTareas(p)}
-                        className="bg-black text-white text-xs font-black px-4 py-2 uppercase hover:bg-gray-800"
-                      >
-                        Ver Tareas
-                      </button>
-                      {user.role === "gerente" && (
-                        <div className="ml-auto flex gap-3">
-                          <button onClick={() => { setProyectoActual(p); setIsModalOpen(true); }} className="text-xs font-black text-blue-700 hover:underline">EDITAR</button>
-                          <button onClick={() => handleDeleteProject(p.id)} className="text-xs font-black text-red-600 hover:underline">ELIMINAR</button>
+                {proyectos.map((p) => {
+                  //  Calculamos si hay tareas esperando validación en este proyecto
+                  const tareasEnRevision = todasLasTareas.filter(t => t.projectId == p.id && t.status === "completada").length;
+                  
+                  return (
+                    // Se agregó 'relative' al final del className de este div
+                    <div key={p.id} className="bg-white border-4 border-black p-5 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative">
+                      
+                      {/* GLOBO DE NOTIFICACIÓN PARA GERENTES */}
+                      {user.role === "gerente" && tareasEnRevision > 0 && (
+                        <div className="absolute -top-4 -right-4 bg-red-600 text-white border-2 border-black font-black px-3 py-1 animate-pulse shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-10">
+                          {tareasEnRevision} POR VALIDAR
                         </div>
                       )}
+
+                      <h3 className="text-xl font-black mb-2 uppercase italic">{p.name}</h3>
+                      <p className="text-sm font-bold text-gray-800 mb-4 h-12 overflow-hidden">{p.description}</p>
+
+                      <div className="flex justify-between text-xs font-black mb-1 uppercase">
+                        <span>Progreso</span>
+                        <span>{p.progress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 h-6 border-2 border-black mb-4">
+                        <div className="bg-blue-600 h-full border-r-2 border-black" style={{ width: `${p.progress}%` }}></div>
+                      </div>
+
+                      <div className="flex gap-4">
+                        <button
+                          onClick={() => abrirModalTareas(p)}
+                          className="bg-black text-white text-xs font-black px-4 py-2 uppercase hover:bg-gray-800"
+                        >
+                          Ver Tareas
+                        </button>
+                        {user.role === "gerente" && (
+                          <div className="ml-auto flex gap-3">
+                            <button onClick={() => { setProyectoActual(p); setIsModalOpen(true); }} className="text-xs font-black text-blue-700 hover:underline">EDITAR</button>
+                            <button onClick={() => handleDeleteProject(p.id)} className="text-xs font-black text-red-600 hover:underline">ELIMINAR</button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </section>
 
               {/* GRÁFICA REAL INTEGRADA */}
@@ -386,11 +471,18 @@ export default function DashboardPage() {
               <h2 className="text-2xl font-black uppercase italic border-b-2 border-black inline-block mb-8">Usuarios del Sistema</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {usuarios.filter(u => u.role !== "gerente").map((usuario) => {
-                  const tareasUsuario = todasLasTareas.filter(t => t.assignedTo === usuario.id);
+                  // Usamos el doble igual (==) para evitar problemas de ID invisible
+                  const tareasUsuario = todasLasTareas.filter(t => t.assignedTo == usuario.id);
+                  
+                  // Contamos los 3 estados
                   const tareasPendientes = tareasUsuario.filter(t => t.status === "pendiente").length;
                   const tareasCompletadas = tareasUsuario.filter(t => t.status === "completada").length;
+                  const tareasFinalizadas = tareasUsuario.filter(t => t.status === "finalizada").length;
+                  
+                  // Sumamos completadas + finalizadas para la barra de progreso
+                  const tareasLogradas = tareasCompletadas + tareasFinalizadas;
                   const totalTareas = tareasUsuario.length;
-
+                  
                   return (
                     <div key={usuario.id} className="bg-white border-4 border-black p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
                       <div className="flex justify-between items-start mb-4">
@@ -403,28 +495,34 @@ export default function DashboardPage() {
                           <p className="text-xs font-bold uppercase">Total Tareas</p>
                         </div>
                       </div>
-
+                      
+                      {/*  LOS 3 ESTADOS EN LA TARJETA */}
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
                           <span className="font-bold uppercase text-sm">Pendientes</span>
                           <span className="bg-yellow-400 text-black font-black px-3 py-1 border-2 border-black">{tareasPendientes}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="font-bold uppercase text-sm">Completadas</span>
-                          <span className="bg-green-500 text-white font-black px-3 py-1 border-2 border-black">{tareasCompletadas}</span>
+                          <span className="font-bold uppercase text-sm text-blue-700">En Revisión</span>
+                          <span className="bg-blue-100 text-blue-700 font-black px-3 py-1 border-2 border-blue-700">{tareasCompletadas}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold uppercase text-sm text-green-700">Finalizadas</span>
+                          <span className="bg-green-500 text-white font-black px-3 py-1 border-2 border-black">{tareasFinalizadas}</span>
                         </div>
                       </div>
-
+                      
+                      {/* BARRA DE PROGRESO ARREGLADA */}
                       {totalTareas > 0 && (
                         <div className="mt-4 pt-4 border-t-2 border-black">
                           <div className="w-full bg-gray-200 h-4 border-2 border-black">
-                            <div
-                              className="bg-green-500 h-full border-r-2 border-black"
-                              style={{ width: totalTareas > 0 ? `${(tareasCompletadas / totalTareas) * 100}%` : '0%' }}
+                            <div 
+                              className="bg-green-500 h-full border-r-2 border-black transition-all duration-500" 
+                              style={{ width: totalTareas > 0 ? `${(tareasLogradas / totalTareas) * 100}%` : '0%' }}
                             ></div>
                           </div>
                           <p className="text-xs font-bold uppercase text-center mt-2">
-                            {totalTareas > 0 ? Math.round((tareasCompletadas / totalTareas) * 100) : 0}% Completado
+                            {totalTareas > 0 ? Math.round((tareasLogradas / totalTareas) * 100) : 0}% Completado
                           </p>
                         </div>
                       )}
@@ -453,12 +551,7 @@ export default function DashboardPage() {
                           <h3 className="text-xl font-black uppercase italic">{tarea.title}</h3>
                           <p className="text-sm font-bold text-gray-600 uppercase">Proyecto: {nombreProyecto}</p>
                         </div>
-                        <button
-                          onClick={() => handleChangeTaskStatus(tarea)}
-                          className={`text-xs font-black px-4 py-2 border-2 border-black uppercase transition ${tarea.status === "completada" ? "bg-green-500" : "bg-yellow-400"}`}
-                        >
-                          {tarea.status}
-                        </button>
+                        {renderizarBotonEstado(tarea)}
                       </div>
                       <p className={`text-sm font-bold uppercase ${estaAtrasada ? "text-red-600" : "text-gray-600"}`}>
                         Vencimiento: {new Date(tarea.dueDate).toLocaleDateString('es-ES', { timeZone: 'UTC' })}
@@ -563,12 +656,7 @@ export default function DashboardPage() {
 
                       <div className="flex gap-2 items-center">
                         {/* Botón Cambiar Estado */}
-                        <button
-                          onClick={() => handleChangeTaskStatus(tarea)}
-                          className={`text-xs font-black px-4 py-2 border-2 border-black uppercase transition ${tarea.status === "completada" ? "bg-green-500" : "bg-yellow-400"}`}
-                        >
-                          {tarea.status}
-                        </button>
+                       {renderizarBotonEstado(tarea)}
                         
                         {/* Botones Editar y Eliminar (Solo Gerente) */}
                         {user.role === "gerente" && (
