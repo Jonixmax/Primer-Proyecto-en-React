@@ -149,11 +149,11 @@ export default function DashboardPage() {
       
       const cargarDatos = async () => {
         try {
-          const resP = await axios.get("http://localhost:3001/projects");
+          const resP = await axios.get("https://primer-proyecto-en-react.onrender.com/projects");
           setProyectos(resP.data);
-          const resU = await axios.get("http://localhost:3001/users");
+          const resU = await axios.get("https://primer-proyecto-en-react.onrender.com/users");
           setUsuarios(resU.data);
-          const resT = await axios.get("http://localhost:3001/tasks");
+          const resT = await axios.get("https://primer-proyecto-en-react.onrender.com/tasks");
           setTodasLasTareas(resT.data);
         } catch (err) {
           console.error("Error cargando datos:", err);
@@ -168,7 +168,7 @@ export default function DashboardPage() {
     e.preventDefault();
     setError("");
     try {
-      const res = await axios.get("http://localhost:3001/users");
+      const res = await axios.get("https://primer-proyecto-en-react.onrender.com/users");
       const u = res.data.find((userItem: any) => userItem.username === username && userItem.password === password);
       if (u) {
         login(u);
@@ -182,12 +182,12 @@ export default function DashboardPage() {
     e.preventDefault();
     setError("");
     try {
-      const resExistentes = await axios.get("http://localhost:3001/users");
+      const resExistentes = await axios.get("https://primer-proyecto-en-react.onrender.com/users");
       if (resExistentes.data.some((u: any) => u.username === username)) {
         setError("El usuario ya existe.");
         return;
       }
-      const res = await axios.post("http://localhost:3001/users", { username, password, role: "usuario" });
+      const res = await axios.post("https://primer-proyecto-en-react.onrender.com/users", { username, password, role: "usuario" });
       login(res.data);
       setUsername("");
       setPassword("");
@@ -199,10 +199,10 @@ export default function DashboardPage() {
     e.preventDefault();
     try {
       if (proyectoActual.id) {
-        const res = await axios.put(`http://localhost:3001/projects/${proyectoActual.id}`, proyectoActual);
+        const res = await axios.put(`https://primer-proyecto-en-react.onrender.com/projects/${proyectoActual.id}`, proyectoActual);
         setProyectos(proyectos.map(p => p.id === proyectoActual.id ? res.data : p));
       } else {
-        const res = await axios.post("http://localhost:3001/projects", { ...proyectoActual, progress: 0 });
+        const res = await axios.post("https://primer-proyecto-en-react.onrender.com/projects", { ...proyectoActual, progress: 0 });
         setProyectos([...proyectos, res.data]);
       }
       setIsModalOpen(false);
@@ -212,7 +212,7 @@ export default function DashboardPage() {
   const handleDeleteProject = async (id: string | number) => {
     if (!window.confirm("¿Seguro que deseas eliminar este proyecto?")) return;
     try {
-      await axios.delete(`http://localhost:3001/projects/${id}`);
+      await axios.delete(`https://primer-proyecto-en-react.onrender.com/projects/${id}`);
       setProyectos(proyectos.filter(p => p.id !== id));
     } catch { alert("Error al eliminar."); }
   };
@@ -225,7 +225,7 @@ const calcularYGuardarProgreso = async (projectId: string | number, listaTareas:
       : Math.round((listaTareas.filter(t => t.status === "completada" || t.status === "finalizada").length / listaTareas.length) * 100);
 
     try {
-      await axios.patch(`http://localhost:3001/projects/${projectId}`, { progress: porcentaje });
+      await axios.patch(`https://primer-proyecto-en-react.onrender.com/projects/${projectId}`, { progress: porcentaje });
       setProyectos(prev => prev.map(p => p.id === projectId ? { ...p, progress: porcentaje } : p));
     } catch (err) { console.error(err); }
   };
@@ -235,7 +235,7 @@ const calcularYGuardarProgreso = async (projectId: string | number, listaTareas:
     setTareaEditandoId(null); // Reset edición al abrir
     setNuevaTarea({ title: "", assignedTo: "", dueDate: "" });
     try {
-      const res = await axios.get(`http://localhost:3001/tasks?projectId=${proyecto.id}`);
+      const res = await axios.get(`https://primer-proyecto-en-react.onrender.com/tasks?projectId=${proyecto.id}`);
       setTareas(res.data);
       setIsTaskModalOpen(true);
     } catch { alert("Error al cargar tareas."); }
@@ -256,7 +256,7 @@ const calcularYGuardarProgreso = async (projectId: string | number, listaTareas:
 
       if (tareaEditandoId) {
         // ACTUALIZAR (PATCH)
-        const res = await axios.patch(`http://localhost:3001/tasks/${tareaEditandoId}`, datosTarea);
+        const res = await axios.patch(`https://primer-proyecto-en-react.onrender.com/tasks/${tareaEditandoId}`, datosTarea);
         const listaActualizada = tareas.map(t => t.id === tareaEditandoId ? res.data : t);
         setTareas(listaActualizada);
         setTodasLasTareas(prev => prev.map(t => t.id === tareaEditandoId ? res.data : t));
@@ -271,7 +271,7 @@ const calcularYGuardarProgreso = async (projectId: string | number, listaTareas:
           createdAt: new Date().toISOString().split('T')[0],
           completedAt: null
         };
-        const res = await axios.post("http://localhost:3001/tasks", nuevaTCompleta);
+        const res = await axios.post("https://primer-proyecto-en-react.onrender.com/tasks", nuevaTCompleta);
         const listaActualizada = [...tareas, res.data];
         setTareas(listaActualizada);
         setTodasLasTareas(prev => [...prev, res.data]);
@@ -306,7 +306,7 @@ const handleChangeTaskStatus = async (tarea: Tarea) => {
         status: nuevoEstado,
         completedAt: nuevoEstado === "completada" || nuevoEstado === "finalizada" ? new Date().toISOString().split('T')[0] : null
       };
-      const res = await axios.patch(`http://localhost:3001/tasks/${tarea.id}`, actualizacion);
+      const res = await axios.patch(`https://primer-proyecto-en-react.onrender.com/tasks/${tarea.id}`, actualizacion);
       
       const listaActualizada = tareas.map(t => t.id === tarea.id ? res.data : t);
       setTareas(listaActualizada);
@@ -319,7 +319,7 @@ const handleDeleteTask = async (id: string | number, projectId: string | number)
     if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
     try {
       // 1. Eliminamos de la base de datos
-      await axios.delete(`http://localhost:3001/tasks/${id}`);
+      await axios.delete(`https://primer-proyecto-en-react.onrender.com/tasks/${id}`);
       
       // 2. Actualizamos la lista del modal
       const listaActualizada = tareas.filter(t => t.id !== id);
